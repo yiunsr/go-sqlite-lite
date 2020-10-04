@@ -6,6 +6,7 @@
 // designed to be simple, lightweight, performant, understandable,
 // unsurprising, debuggable, ergonomic, and fully featured.  This driver does
 // not provide a database/sql interface.
+
 package sqlite3
 
 /*
@@ -811,6 +812,74 @@ func (s *Stmt) Exec(args ...interface{}) error {
 	}
 
 	return err
+}
+
+// BindInt32 is bind 32int.
+func (s *Stmt) BindInt32(i int, v int32) error {
+	rc := C.sqlite3_bind_int(s.stmt, C.int(i+1), C.int(v))
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
+}
+
+// BindInt64 is bind 64int
+func (s *Stmt) BindInt64(i int, v int64) error {
+	rc := C.sqlite3_bind_int64(s.stmt, C.int(i+1), C.sqlite3_int64(v))
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
+}
+
+// BindDouble is bind double
+func (s *Stmt) BindDouble(i int, v float64) error {
+	rc := C.sqlite3_bind_double(s.stmt, C.int(i+1), C.double(v))
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
+}
+
+// BindText is bind string
+func (s *Stmt) BindText(i int, v string) error {
+	rc := C.bind_text(s.stmt, C.int(i+1), cStr(v), C.int(len(v)), 1)
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
+}
+
+// BindZeroblob is bind string
+func (s *Stmt) BindZeroblob(i int, v int) error {
+	rc := C.sqlite3_bind_zeroblob(s.stmt, C.int(i+1), C.int(v))
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
+}
+
+// BindBlob is bind blob
+func (s *Stmt) BindBlob(i int, v []byte) error {
+	var rc C.int
+	if v == nil {
+		rc = C.sqlite3_bind_null(s.stmt, C.int(i+1))
+	} else {
+		rc = C.bind_blob(s.stmt, C.int(i+1), cBytes(v), C.int(len(v)), 1)
+	}
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
+}
+
+// BindNull is null
+func (s *Stmt) BindNull(i int) error {
+	rc := C.sqlite3_bind_null(s.stmt, C.int(i+1))
+	if rc != OK {
+		return errStr(rc)
+	}
+	return nil
 }
 
 // Bind binds either the named arguments or unnamed arguments depending on the
