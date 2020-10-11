@@ -10,11 +10,19 @@
 package sqlite3
 
 /*
+
+#cgo CFLAGS: -DSQLITE_USE_ALLOCA
+#cgo CFLAGS: -DSQLITE_DQS=0
+#cgo CFLAGS: -DSQLITE_MAX_COLUMN=16384
+#
+
 // SQLite compilation options.
 // https://www.sqlite.org/compile.html
 // https://www.sqlite.org/footprint.html
 #cgo CFLAGS: -std=gnu99
-#cgo CFLAGS: -Os
+
+#cgo CFLAGS: -O3
+#cgo CFLAGS: -msse -msse2 -msse3 -mssse3
 #cgo CFLAGS: -DNDEBUG=1
 #cgo CFLAGS: -DSQLITE_CORE=1
 #cgo CFLAGS: -DSQLITE_ENABLE_API_ARMOR=1
@@ -850,6 +858,75 @@ func (s *Stmt) BindText(i int, v string) error {
 	return nil
 }
 
+// InsertRowWhitPK is insert one row(one pk and only text list)
+func (s *Stmt) InsertRowWhitPK(pk int, record []string, colCount int) error {
+	var rc C.int
+	rc = C.sqlite3_bind_int(s.stmt, C.int(1), C.int(pk))
+	if rc != OK {
+		return errStr(rc)
+	}
+	colIdx := 2
+	for i, v := range record {
+		if i == colCount {
+			break
+		}
+		rc = C.bind_text(s.stmt, C.int(colIdx), cStr(v), C.int(len(v)), 1)
+		colIdx++
+		if rc != OK {
+			return errStr(rc)
+		}
+	}
+	for colIdx <= colCount+1 {
+		rc := C.bind_text(s.stmt, C.int(colIdx), cStr(""), C.int(0), 1)
+		if rc != OK {
+			return errStr(rc)
+		}
+		colIdx++
+	}
+	rc = C.sqlite3_blocking_step(s.db, s.stmt)
+	if rc != DONE {
+		return errStr(rc)
+	}
+
+	s.colTypes = s.colTypes[:0]
+	s.haveColTypes = false
+	if rc = C.sqlite3_reset(s.stmt); rc != OK {
+		return errStr(rc)
+	}
+
+	return nil
+}
+
+// InsertManyRowWhitPK is insert many row using call many time
+func (s *Stmt) InsertManyRowWhitPK(
+	pk int, record []string, colStart1 int, colCount int) (int, error) {
+	var rc C.int
+	colIdx := colStart1
+	rc = C.sqlite3_bind_int(s.stmt, C.int(colIdx), C.int(pk))
+	colIdx++
+	if rc != OK {
+		return colIdx, errStr(rc)
+	}
+	for i, v := range record {
+		if i == colCount {
+			break
+		}
+		rc = C.bind_text(s.stmt, C.int(colIdx), cStr(v), C.int(len(v)), 1)
+		colIdx++
+		if rc != OK {
+			return colIdx, errStr(rc)
+		}
+	}
+	for colIdx <= (colStart1 + colCount) {
+		rc := C.bind_text(s.stmt, C.int(colIdx), cStr(""), C.int(0), 1)
+		if rc != OK {
+			return colIdx, errStr(rc)
+		}
+		colIdx++
+	}
+	return colIdx, nil
+}
+
 // BindZeroblob is bind string
 func (s *Stmt) BindZeroblob(i int, v int) error {
 	rc := C.sqlite3_bind_zeroblob(s.stmt, C.int(i+1), C.int(v))
@@ -1051,6 +1128,19 @@ func (s *Stmt) Step() (bool, error) {
 		return false, nil
 	}
 	return false, errStr(rc)
+}
+
+// StepAndReset is call step & reset once.
+func (s *Stmt) StepAndReset() error {
+	C.sqlite3_blocking_step(s.db, s.stmt)
+
+	s.colTypes = s.colTypes[:0]
+	s.haveColTypes = false
+	if rc := C.sqlite3_reset(s.stmt); rc != OK {
+		return errStr(rc)
+	}
+	return nil
+
 }
 
 // StepToCompletion is a convenience method that repeatedly calls Step until no
